@@ -1,0 +1,8 @@
+{
+  "name": "MALLI AQUATIC CLUB",
+  "description": "El club exclusivo de piscinas y parque acuático. Participa en sorteos diarios de pases libres y disfruta del sol.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
