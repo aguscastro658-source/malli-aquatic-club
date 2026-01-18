@@ -195,6 +195,15 @@ export const dataService = {
     }));
   },
 
+  clearDepartures: async () => {
+    const { error } = await supabase
+      .from('malli_departures')
+      .delete()
+      .gte('dni', '0'); // Delete all
+    window.dispatchEvent(new CustomEvent('malli_app_config_updated'));
+    return !error;
+  },
+
   getAllUsers: async () => {
     const { data, error } = await supabase
       .from('malli_users')

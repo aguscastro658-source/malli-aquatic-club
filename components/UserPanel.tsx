@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AppRoute } from '../types';
 import { dataService } from '../services/dataService';
 import confetti from 'canvas-confetti';
+import { QRCodeSVG } from 'qrcode.react';
 
 const UserPanel: React.FC = () => {
   const [raffleState, setRaffleState] = useState<'banner' | 'form' | 'success'>('banner');
@@ -329,38 +330,63 @@ const UserPanel: React.FC = () => {
               )}
 
               {raffleState === 'success' && (
-                <div className="h-full bg-white p-10 md:p-16 rounded-[4rem] border border-stone-100 shadow-[0_30px_80px_rgba(0,0,0,0.03)] flex flex-col items-center justify-center text-center animate-in zoom-in duration-700">
-                  <div className="w-20 h-20 md:w-28 md:h-28 bg-green-500 rounded-full flex items-center justify-center mb-8 md:mb-10 text-white text-4xl md:text-5xl shadow-[0_15px_30px_rgba(34,197,94,0.3)] animate-bounce">
-                    <i className="fa-solid fa-check"></i>
+                <div className="h-full bg-white p-8 md:p-12 rounded-[4rem] border border-stone-100 shadow-[0_30px_80px_rgba(0,0,0,0.03)] flex flex-col items-center justify-center text-center animate-in zoom-in duration-700">
+                  <div className="flex flex-col md:flex-row items-center justify-center gap-8 mb-8 md:mb-10">
+                    <div className="w-20 h-20 md:w-24 md:h-24 bg-green-500 rounded-full flex items-center justify-center text-white text-3xl md:text-4xl shadow-lg animate-bounce">
+                      <i className="fa-solid fa-check"></i>
+                    </div>
+
+                    <div className="bg-stone-950 p-6 rounded-[2.5rem] shadow-2xl flex flex-col items-center space-y-3 transform hover:scale-105 transition-transform duration-500">
+                      <div className="bg-white p-3 rounded-[1.5rem] shadow-inner relative">
+                        <div className="w-32 h-32 bg-white flex items-center justify-center relative overflow-hidden">
+                          <QRCodeSVG
+                            value={JSON.stringify({ dni: userData.dni, type: 'registration_verify' })}
+                            size={128}
+                            level="H"
+                            includeMargin={false}
+                          />
+                          <div className="absolute top-0 left-0 w-full h-1 bg-sky-500 animate-[scan_2.5s_infinite] shadow-[0_0_10px_#0ea5e9] opacity-30"></div>
+                        </div>
+                      </div>
+                      <p className="text-[8px] font-black text-sky-400 uppercase tracking-[0.3em]">CÓDIGO DE ACCESO</p>
+                    </div>
                   </div>
-                  <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-stone-900 uppercase tracking-tighter mb-4 md:mb-6 leading-none font-outfit">
-                    LISTO PARA <br className="hidden md:block" /> GANAR
+
+                  <h2 className="text-3xl md:text-5xl font-black text-stone-900 uppercase tracking-tighter mb-4 leading-none font-outfit">
+                    INSCRIPCIÓN <br className="hidden md:block" /> CONFIRMADA
                   </h2>
-                  <p className="text-stone-400 text-sm md:text-lg font-bold mb-10 md:mb-12 max-w-sm mx-auto uppercase tracking-widest leading-relaxed">
-                    Inscripción correcta. No hace falta refrescar, si ganas te avisaremos aquí mismo con una fiesta de colores.
+                  <p className="text-stone-400 text-xs md:text-sm font-bold mb-8 max-w-sm mx-auto uppercase tracking-widest leading-relaxed">
+                    Muestra este código al administrador para validar tu presencia física en el complejo.
                   </p>
 
-                  <div className="w-full max-w-sm bg-stone-50 p-6 md:p-8 rounded-[2.5rem] border border-stone-100 space-y-5 md:space-y-6">
+                  <div className="w-full max-w-xs bg-stone-50 p-5 md:p-6 rounded-[2rem] border border-stone-100 space-y-4">
                     <div className="flex justify-between items-center">
                       <div className="text-left">
-                        <p className="text-[8px] md:text-[9px] font-black uppercase tracking-[0.2em] text-stone-400 mb-1">COMPETIDORES</p>
-                        <p className="text-2xl md:text-3xl font-black text-sky-600 leading-none">{activeParticipants.length}</p>
+                        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-stone-400 mb-1">PARTICIPANTES</p>
+                        <p className="text-xl md:text-2xl font-black text-sky-600">{activeParticipants.length}</p>
                       </div>
-                      <div className="flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest">
+                      <div className="flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest">
                         <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                        VIVO
+                        VIRTUAL
                       </div>
                     </div>
 
-                    <div className="relative pt-2">
-                      <div className="w-full h-2.5 md:h-3 bg-stone-200 rounded-full overflow-hidden shadow-inner">
+                    <div className="relative pt-1">
+                      <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden shadow-inner">
                         <div
-                          className="h-full bg-gradient-to-r from-sky-400 to-sky-600 transition-all duration-[3000ms] ease-out shadow-[0_0_10px_rgba(2,132,199,0.3)]"
+                          className="h-full bg-gradient-to-r from-sky-400 to-sky-600 transition-all duration-[3000ms]"
                           style={{ width: `${Math.min((activeParticipants.length / 30) * 100, 100)}%` }}
                         ></div>
                       </div>
                     </div>
                   </div>
+
+                  <style>{`
+                    @keyframes scan {
+                      0% { top: 0; }
+                      100% { top: 100%; }
+                    }
+                  `}</style>
                 </div>
               )}
             </div>

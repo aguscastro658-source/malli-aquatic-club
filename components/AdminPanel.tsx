@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppRoute } from '../types';
 import { dataService } from '../services/dataService';
+import { Html5Qrcode } from 'html5-qrcode';
+import { QRCodeSVG } from 'qrcode.react';
 
 const PINS = {
   MARIA: "625547",
@@ -10,12 +12,13 @@ const PINS = {
 
 const AdminPanel: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState<'raffle' | 'users' | 'departures' | 'config' | 'winner-edit'>('raffle');
+  const [activeTab, setActiveTab] = useState<'raffle' | 'users' | 'departures' | 'config' | 'winner-edit' | 'scanner'>('raffle');
   const [pin, setPin] = useState('');
   const [config, setConfig] = useState<any>(null);
   const [participants, setParticipants] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [departures, setDepartures] = useState<any[]>([]);
+  const [scannedUser, setScannedUser] = useState<any>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [showWinnerPreview, setShowWinnerPreview] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -24,13 +27,101 @@ const AdminPanel: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState(false);
   const navigate = useNavigate();
 
+  const handleClearDepartures = async () => {
+    if (confirm("¿Estás segura de eliminar todo el historial de bajas?")) {
+      await dataService.clearDepartures();
+      loadData(true);
+    }
+  };
+
+  const [scannerError, setScannerError] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+
+  const startScanner = async () => {
+    // Explicitly check for HTTPS again on click
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+      setScannerError("ERROR: La cámara BLOQUEADA por el navegador (Falta HTTPS).");
+      return;
+    }
+
+    setScannerError(null);
+    setIsCapturing(true);
+
+    try {
+      // Clean up previous instance before starting
+      if (scannerRef.current) {
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
+      }
+
+      const html5QrCode = new Html5Qrcode("reader");
+      scannerRef.current = html5QrCode;
+
+      const qrConfig = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+      };
+
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        qrConfig,
+        (decodedText) => onScanSuccess(decodedText),
+        () => { }
+      );
+    } catch (err: any) {
+      console.error("Scanner start error:", err);
+      setIsCapturing(false);
+      const errorMsg = err?.toString() || "";
+      if (errorMsg.includes("NotAllowedError") || errorMsg.includes("Permission")) {
+        setScannerError("Permiso de cámara denegado. Revisa los candados de Chrome.");
+      } else {
+        setScannerError("Error de cámara: " + errorMsg.substring(0, 50));
+      }
+    }
+  };
+
+  // Load scanner on tab enter if possible (may fail on mobile, but the button will be there)
+  useEffect(() => {
+    if (activeTab === 'scanner') {
+      // Try auto-start, but catch silently if browser blocks auto-camera
+      startScanner().catch(() => setIsCapturing(false));
+
+      return () => {
+        if (scannerRef.current && scannerRef.current.isScanning) {
+          scannerRef.current.stop().catch(e => console.warn("Scanner stop failed", e));
+        }
+      };
+    } else {
+      setIsCapturing(false);
+    }
+  }, [activeTab]);
+
+  async function onScanSuccess(decodedText: string) {
+    try {
+      const data = JSON.parse(decodedText);
+      const dni = data.dni || decodedText;
+      const user = await dataService.getUserByDni(dni);
+      const isPart = await dataService.isUserInscripted(dni);
+      setScannedUser({ ...user, isParticipating: isPart });
+    } catch (e) {
+      if (decodedText.length >= 7 && !isNaN(Number(decodedText))) {
+        const user = await dataService.getUserByDni(decodedText);
+        const isPart = await dataService.isUserInscripted(decodedText);
+        setScannedUser({ ...user, isParticipating: isPart });
+      }
+    }
+  }
+
   const loadData = useCallback(async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
     try {
       const cfg = await dataService.getConfig();
 
       // No sobrescribir la config si el usuario está editando textos para evitar el lag/pérdida de foco
-      if (activeTab !== 'config' && activeTab !== 'winner-edit') {
+      if (activeTab !== 'config' && activeTab !== 'winner-edit' && activeTab !== 'scanner') {
         setConfig(cfg);
       }
 
@@ -207,6 +298,7 @@ const AdminPanel: React.FC = () => {
 
           <div className="flex flex-wrap gap-1.5 bg-stone-100 p-1.5 rounded-[2rem] border border-stone-200 w-full xl:w-auto overflow-x-auto whitespace-nowrap scrollbar-hide relative z-10">
             {[
+              { id: 'scanner', label: 'Escanear', icon: 'fa-qrcode' },
               { id: 'raffle', label: 'Sorteo', icon: 'fa-trophy' },
               { id: 'users', label: 'Registrados', icon: 'fa-users' },
               { id: 'departures', label: 'Bajas', icon: 'fa-user-slash' },
@@ -227,6 +319,144 @@ const AdminPanel: React.FC = () => {
 
         {/* Content Tabs Optimized */}
         <main className="min-h-[500px]">
+          {activeTab === 'scanner' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in slide-in-from-bottom duration-500">
+              <div className="bg-white p-8 md:p-12 rounded-[3.5rem] border border-stone-100 shadow-lg overflow-hidden relative">
+                <div className="absolute top-0 inset-x-0 h-1.5 bg-sky-600"></div>
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-sky-50 rounded-2xl flex items-center justify-center text-sky-600 text-xl">
+                      <i className="fa-solid fa-camera"></i>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black uppercase tracking-tighter text-stone-800 font-outfit">Escáner de Acceso</h3>
+                      <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Validación de presencia física</p>
+                    </div>
+                  </div>
+
+                </div>
+
+                {scannerError ? (
+                  <div className="p-10 bg-white border-2 border-stone-100 rounded-[2rem] text-center shadow-sm">
+                    <i className="fa-solid fa-camera-slash text-4xl text-stone-300 mb-6"></i>
+                    <p className="text-stone-800 font-black text-xs uppercase tracking-widest mb-3">{scannerError}</p>
+                    <p className="text-stone-400 text-[10px] font-medium italic mb-8 max-w-[250px] mx-auto uppercase">
+                      La cámara es obligatoria para validar ingresos.
+                    </p>
+
+                    <button
+                      onClick={startScanner}
+                      className="w-full py-5 bg-sky-600 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest hover:bg-sky-700 transition-all active:scale-95 shadow-lg"
+                    >
+                      <i className="fa-solid fa-power-off mr-2"></i>
+                      REINTENTAR ENCENDER CÁMARA
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative group">
+                    <div id="reader" className="overflow-hidden rounded-[2rem] border-2 border-stone-200 bg-stone-50 min-h-[350px] shadow-inner"></div>
+                    {!isCapturing && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-stone-50/80 backdrop-blur-sm rounded-[2rem]">
+                        <button
+                          onClick={startScanner}
+                          className="px-8 py-5 bg-stone-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all"
+                        >
+                          <i className="fa-solid fa-camera mr-2 text-sky-400"></i>
+                          ACTIVAR CÁMARA DIRECTA
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div id="reader-hidden" className="hidden"></div>
+
+                <div className="mt-8 p-6 bg-sky-50 rounded-[2rem] border border-sky-100 italic text-[10px] text-sky-800 font-bold uppercase tracking-wider text-center">
+                  Asegúrate de que el código QR esté centrado y bien iluminado.
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-8">
+                <div className="bg-stone-900 p-8 md:p-12 rounded-[3.5rem] text-white shadow-2xl flex-grow relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-sky-600/10 rounded-full blur-[100px]"></div>
+
+                  {scannedUser ? (
+                    <div className="relative z-10 animate-in zoom-in duration-300">
+                      <div className="flex items-center gap-6 mb-8">
+                        <div className="w-20 h-20 bg-white/10 rounded-[2rem] flex items-center justify-center text-3xl border border-white/10">
+                          <i className="fa-solid fa-user-check text-sky-400"></i>
+                        </div>
+                        <div>
+                          <p className="text-sky-400 text-[9px] font-black uppercase tracking-[0.3em] mb-1">USUARIO IDENTIFICADO</p>
+                          <h4 className="text-2xl md:text-3xl font-black uppercase tracking-tighter leading-none">{scannedUser.name}</h4>
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-white/5 p-5 rounded-3xl border border-white/5">
+                            <p className="text-[8px] font-black text-stone-500 uppercase tracking-widest mb-1">DNI REGISTRADO</p>
+                            <p className="font-mono font-black text-lg tracking-widest">{scannedUser.dni}</p>
+                          </div>
+                          <div className="bg-white/5 p-5 rounded-3xl border border-white/5">
+                            <p className="text-[8px] font-black text-stone-500 uppercase tracking-widest mb-1">ESTADO CLUB</p>
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${scannedUser.isParticipating ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+                              <p className="font-black text-xs uppercase">{scannedUser.isParticipating ? 'CON DEPÓSITO' : 'SIN DEPÓSITO'}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {scannedUser.isParticipating ? (
+                          <div className="bg-green-500/10 border-2 border-green-500/20 p-8 rounded-[2.5rem] flex flex-col items-center text-center gap-4">
+                            <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white text-2xl shadow-lg">
+                              <i className="fa-solid fa-check-double"></i>
+                            </div>
+                            <div>
+                              <p className="text-green-400 font-black text-sm uppercase tracking-widest mb-2">VALIDACIÓN EXITOSA</p>
+                              <p className="text-white/70 text-[10px] font-medium leading-relaxed italic uppercase tracking-wider">
+                                El usuario está correctamente inscripto y se encuentra físicamente presente.
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-red-500/10 border-2 border-red-500/20 p-8 rounded-[2.5rem] flex flex-col items-center text-center gap-4">
+                            <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center text-white text-2xl shadow-lg">
+                              <i className="fa-solid fa-triangle-exclamation"></i>
+                            </div>
+                            <div>
+                              <p className="text-red-400 font-black text-sm uppercase tracking-widest mb-2">SIN INSCRIPCIÓN</p>
+                              <p className="text-white/70 text-[10px] font-medium leading-relaxed italic uppercase tracking-wider">
+                                El usuario no se ha inscripto al sorteo de hoy todavía.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => setScannedUser(null)}
+                          className="w-full py-5 bg-white text-stone-900 rounded-[2rem] font-black text-xs uppercase tracking-widest hover:bg-sky-50 transition-all active:scale-95"
+                        >
+                          Limpiar y Escanear Siguiente
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center space-y-8 opacity-40">
+                      <div className="w-32 h-32 bg-white/5 rounded-[3rem] flex items-center justify-center text-6xl border border-white/10">
+                        <i className="fa-solid fa-qrcode"></i>
+                      </div>
+                      <div>
+                        <h4 className="text-xl font-black uppercase tracking-widest mb-2">Esperando Escaneo</h4>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] italic">Apunta la cámara al código del usuario</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'raffle' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="bg-white p-10 md:p-12 rounded-[3.5rem] border border-stone-100 shadow-lg text-center flex flex-col justify-center relative overflow-hidden group">
@@ -331,14 +561,26 @@ const AdminPanel: React.FC = () => {
 
           {activeTab === 'departures' && (
             <div className="bg-white p-10 md:p-12 rounded-[3.5rem] border border-stone-100 shadow-lg animate-in slide-in-from-right duration-500">
-              <div className="flex items-center gap-5 mb-12">
-                <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 text-xl shadow-xs">
-                  <i className="fa-solid fa-user-slash"></i>
+              <div className="flex flex-col md:flex-row items-center justify-between gap-5 mb-12">
+                <div className="flex items-center gap-5">
+                  <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 text-xl shadow-xs">
+                    <i className="fa-solid fa-user-slash"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black uppercase tracking-tighter text-red-600 font-outfit leading-none">Historial de Bajas</h3>
+                    <p className="text-stone-400 text-[10px] mt-2 uppercase font-black tracking-widest">Control administrativo hoy</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-2xl font-black uppercase tracking-tighter text-red-600 font-outfit leading-none">Historial de Bajas</h3>
-                  <p className="text-stone-400 text-[10px] mt-2 uppercase font-black tracking-widest">Control administrativo hoy</p>
-                </div>
+
+                {departures.length > 0 && (
+                  <button
+                    onClick={handleClearDepartures}
+                    className="flex items-center gap-3 bg-red-50 text-red-600 px-6 py-4 rounded-3xl hover:bg-red-100 transition-all font-black text-[10px] uppercase tracking-widest active:scale-95"
+                  >
+                    <i className="fa-solid fa-trash-can"></i>
+                    Limpiar Historial
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -498,10 +740,18 @@ const AdminPanel: React.FC = () => {
             </div>
 
             <div className="bg-stone-950 p-10 rounded-[4rem] shadow-3xl inline-flex flex-col items-center space-y-5">
-              <div className="bg-white p-5 rounded-[2rem] shadow-inner relative">
-                <div className="w-32 h-32 md:w-36 md:h-36 bg-stone-50 flex items-center justify-center relative overflow-hidden group">
-                  <i className="fa-solid fa-qrcode text-7xl text-stone-200 opacity-60"></i>
-                  <div className="absolute top-0 left-0 w-full h-1 bg-sky-500 animate-[scan_2.5s_infinite] shadow-[0_0_10px_#0ea5e9]"></div>
+              <div className="bg-white p-5 rounded-[2.5rem] shadow-inner relative">
+                <div className="w-32 h-32 md:w-36 md:h-36 bg-white flex items-center justify-center relative overflow-hidden group">
+                  <QRCodeSVG
+                    value={JSON.stringify({
+                      dni: config.winner?.dni || '00000000',
+                      type: 'winner_verify'
+                    })}
+                    size={130}
+                    level="H"
+                    includeMargin={false}
+                  />
+                  <div className="absolute top-0 left-0 w-full h-1 bg-sky-500 animate-[scan_2.5s_infinite] shadow-[0_0_10px_#0ea5e9] opacity-30"></div>
                 </div>
               </div>
               <div className="text-center px-4">
