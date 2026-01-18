@@ -173,7 +173,7 @@ const UserPanel: React.FC = () => {
               Regresar al Panel
             </button>
             <p className="text-sky-900/40 text-[9px] font-black uppercase tracking-widest hidden md:block">•</p>
-            <p className="text-sky-900/60 text-[9px] font-black uppercase tracking-widest italic">Ticket Individual de Socio</p>
+            <p className="text-sky-900/60 text-[9px] font-black uppercase tracking-widest italic">Ticket Individual de Usuario</p>
           </div>
 
           <style>{`
@@ -269,13 +269,7 @@ const UserPanel: React.FC = () => {
               </div>
             </div>
 
-            <button
-              onClick={() => setShowLogoutModal(true)}
-              className="w-full py-5 bg-stone-100 text-stone-500 rounded-[2rem] font-black text-[9px] md:text-[10px] uppercase tracking-[0.2em] hover:bg-stone-200 transition-all flex items-center justify-center gap-3"
-            >
-              <i className="fa-solid fa-gear"></i>
-              Gestionar Cuenta
-            </button>
+
           </div>
 
           {/* Main Action Area */}
@@ -294,7 +288,7 @@ const UserPanel: React.FC = () => {
                       {config.userPanelTitle || 'SOLICITAR PASE LIBRE'}
                     </h2>
                     <p className="text-stone-400 text-sm md:text-lg font-medium mb-10 opacity-90 leading-relaxed italic">
-                      Participar es gratis como socio del club. Solo presiona el botón y ya estás dentro.
+                      Participar es gratis como usuario del club. Solo presiona el botón y ya estás dentro.
                     </p>
                     <button
                       onClick={() => setRaffleState('form')}

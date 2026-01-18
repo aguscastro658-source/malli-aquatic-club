@@ -92,7 +92,7 @@ const Login: React.FC = () => {
           <div className="w-20 h-20 bg-sky-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl shadow-sky-100">
             <i className="fa-solid fa-id-card text-white text-3xl"></i>
           </div>
-          <h2 className="text-3xl font-black text-stone-900 font-outfit uppercase tracking-tighter mb-2">ACCESO SOCIOS</h2>
+          <h2 className="text-3xl font-black text-stone-900 font-outfit uppercase tracking-tighter mb-2">ACCESO USUARIOS</h2>
           <p className="text-stone-400 font-bold text-xs uppercase tracking-widest italic">Bienvenido al club</p>
         </div>
 

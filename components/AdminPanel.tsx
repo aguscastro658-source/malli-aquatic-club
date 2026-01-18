@@ -21,13 +21,18 @@ const AdminPanel: React.FC = () => {
   const [accessDenied, setAccessDenied] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(false);
   const navigate = useNavigate();
 
   const loadData = useCallback(async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
     try {
       const cfg = await dataService.getConfig();
-      setConfig(cfg);
+
+      // No sobrescribir la config si el usuario está editando textos para evitar el lag/pérdida de foco
+      if (activeTab !== 'config' && activeTab !== 'winner-edit') {
+        setConfig(cfg);
+      }
 
       const parts = await dataService.getActiveParticipants();
       setParticipants(parts);
@@ -52,7 +57,7 @@ const AdminPanel: React.FC = () => {
     } finally {
       if (isManual) setTimeout(() => setIsRefreshing(false), 500);
     }
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     loadData();
@@ -93,20 +98,27 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  const updateConfig = async (newPartialConfig: any) => {
+  const updateConfig = (newPartialConfig: any) => {
     const updated = { ...config, ...newPartialConfig };
     setConfig(updated);
-    await dataService.saveConfig(updated);
   };
 
-  const handleDraw = () => {
+  const persistConfig = async () => {
+    setSaveStatus(true);
+    await dataService.saveConfig(config);
+    setTimeout(() => setSaveStatus(false), 2000);
+  };
+
+  const handleDraw = async () => {
     if (participants.length === 0) return;
     setIsDrawing(true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       const winnerIndex = Math.floor(Math.random() * participants.length);
       const winner = participants[winnerIndex];
-      updateConfig({ winner });
+      const updated = { ...config, winner };
+      setConfig(updated);
+      await dataService.saveConfig(updated);
       setIsDrawing(false);
     }, 3000);
   };
@@ -125,7 +137,7 @@ const AdminPanel: React.FC = () => {
 
         <h2 className="text-white font-black uppercase tracking-[0.4em] text-xl mb-4 text-center font-outfit">SEGURIDAD CENTRAL</h2>
         <p className={`text-[9px] font-bold uppercase tracking-[0.5em] mb-12 text-center transition-colors ${accessDenied ? 'text-red-500' : 'text-stone-500'}`}>
-          {accessDenied ? 'ACCESO RESTRINGIDO POR MASTER' : 'AUTENTICACIÓN REQUERIDA'}
+          {accessDenied ? 'ACCESO RESTRINGIDO POR MAESTRO' : 'AUTENTICACIÓN REQUERIDA'}
         </p>
 
         <div className="flex gap-3 mb-16 px-4">
@@ -157,20 +169,43 @@ const AdminPanel: React.FC = () => {
       <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-700">
 
         {/* Admin Header Optimized */}
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 bg-white p-8 md:p-10 rounded-[3rem] border border-stone-100 shadow-[0_20px_60px_rgba(0,0,0,0.02)]">
-          <div>
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-white p-8 md:p-10 rounded-[3rem] border border-stone-100 shadow-[0_20px_60px_rgba(0,0,0,0.02)] relative overflow-hidden">
+          {/* Subtle background glow for license */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-sky-400/5 rounded-full blur-3xl -mr-32 -mt-32"></div>
+
+          <div className="flex-grow relative z-10">
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <span className="bg-sky-100 text-sky-800 text-[9px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest border border-sky-200">MARIA | CONTROL</span>
               <div className="flex items-center bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest border border-green-100 shadow-xs">
                 <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-2 animate-pulse"></div>
                 Sincronizado
               </div>
+
+              {/* License Status Badge */}
+              <div className="flex items-center bg-sky-950 text-sky-300 px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest border border-sky-900 shadow-lg">
+                <i className="fa-solid fa-shield-check mr-2 text-sky-400"></i>
+                Licencia: Activa
+              </div>
             </div>
+
             <h1 className="text-4xl md:text-5xl font-black text-stone-900 font-outfit uppercase tracking-tighter leading-none">Gestión Operativa</h1>
-            <p className="text-stone-400 text-[10px] mt-3 font-bold uppercase tracking-widest italic opacity-80">Última actualización: {lastUpdated}</p>
+
+            <div className="flex flex-wrap items-center gap-6 mt-4">
+              <div>
+                <p className="text-stone-400 text-[10px] font-bold uppercase tracking-widest italic opacity-80 decoration-sky-200 underline-offset-4">Última actualización: {lastUpdated}</p>
+              </div>
+
+              {/* Detailed License Info */}
+              <div className="flex items-center gap-3 py-1 px-4 bg-stone-50 rounded-xl border border-stone-100">
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black text-stone-400 uppercase tracking-widest leading-none">Días Restantes</span>
+                  <span className="text-[12px] font-black text-sky-600">{config.licenseDays || 0} DÍAS</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-1.5 bg-stone-100 p-1.5 rounded-[2rem] border border-stone-200 w-full xl:w-auto overflow-x-auto whitespace-nowrap scrollbar-hide">
+          <div className="flex flex-wrap gap-1.5 bg-stone-100 p-1.5 rounded-[2rem] border border-stone-200 w-full xl:w-auto overflow-x-auto whitespace-nowrap scrollbar-hide relative z-10">
             {[
               { id: 'raffle', label: 'Sorteo', icon: 'fa-trophy' },
               { id: 'users', label: 'Registrados', icon: 'fa-users' },
@@ -197,7 +232,7 @@ const AdminPanel: React.FC = () => {
               <div className="bg-white p-10 md:p-12 rounded-[3.5rem] border border-stone-100 shadow-lg text-center flex flex-col justify-center relative overflow-hidden group">
                 <div className="absolute top-0 inset-x-0 h-1.5 bg-sky-600"></div>
                 <div className="relative z-10">
-                  <h3 className="text-xl font-black uppercase tracking-widest mb-10 text-stone-400 font-outfit">SOCIOS ACTIVOS</h3>
+                  <h3 className="text-xl font-black uppercase tracking-widest mb-10 text-stone-400 font-outfit">USUARIOS ACTIVOS</h3>
                   <div className="text-7xl md:text-8xl font-black text-sky-600 mb-6 drop-shadow-xl">{participants.length}</div>
                   <p className="text-[9px] font-bold text-stone-400 uppercase tracking-[0.3em] mb-12 italic">Candidatos listos para el sorteo</p>
 
@@ -262,7 +297,7 @@ const AdminPanel: React.FC = () => {
             <div className="bg-white p-10 md:p-12 rounded-[3.5rem] border border-stone-100 shadow-lg animate-in slide-in-from-right duration-500">
               <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-10">
                 <div>
-                  <h3 className="text-2xl font-black uppercase tracking-tighter text-stone-800 font-outfit">SOCIOS REGISTRADOS</h3>
+                  <h3 className="text-2xl font-black uppercase tracking-tighter text-stone-800 font-outfit">USUARIOS REGISTRADOS</h3>
                   <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Base histórica: {users.length} inscritos</p>
                 </div>
                 <div className="bg-sky-50 text-sky-700 px-6 py-3 rounded-full text-[9px] font-black uppercase tracking-widest border border-sky-100">
@@ -352,6 +387,42 @@ const AdminPanel: React.FC = () => {
                   className="w-full px-8 py-8 bg-stone-50 border-2 border-stone-100 rounded-[2.5rem] h-40 font-medium focus:border-sky-500 outline-none resize-none transition-all text-base shadow-inner"
                 />
               </div>
+
+              <div className="pt-6 border-t border-stone-100">
+                <h4 className="text-[10px] font-black uppercase text-stone-400 tracking-[0.3em] mb-8 ml-4">TARJETAS INFORMATIVAS (LANDING)</h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Tarjeta 1 */}
+                  <div className="bg-stone-50 p-6 rounded-[2rem] border border-stone-100 space-y-4">
+                    <p className="text-[9px] font-black text-sky-600 uppercase">Tarjeta 1 (Piletas)</p>
+                    <input type="text" value={config.card1Title} onChange={(e) => updateConfig({ card1Title: e.target.value })} placeholder="Título" className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-sky-500" />
+                    <textarea value={config.card1Desc} onChange={(e) => updateConfig({ card1Desc: e.target.value })} placeholder="Descripción" className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl font-medium text-[11px] h-20 outline-none focus:border-sky-500 resize-none" />
+                  </div>
+
+                  {/* Tarjeta 2 */}
+                  <div className="bg-stone-50 p-6 rounded-[2rem] border border-stone-100 space-y-4">
+                    <p className="text-[9px] font-black text-sky-600 uppercase">Tarjeta 2 (Sorteo)</p>
+                    <input type="text" value={config.card2Title} onChange={(e) => updateConfig({ card2Title: e.target.value })} placeholder="Título" className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-sky-500" />
+                    <textarea value={config.card2Desc} onChange={(e) => updateConfig({ card2Desc: e.target.value })} placeholder="Descripción" className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl font-medium text-[11px] h-20 outline-none focus:border-sky-500 resize-none" />
+                  </div>
+
+                  {/* Tarjeta 3 */}
+                  <div className="bg-stone-50 p-6 rounded-[2rem] border border-stone-100 space-y-4">
+                    <p className="text-[9px] font-black text-sky-600 uppercase">Tarjeta 3 (DNI)</p>
+                    <input type="text" value={config.card3Title} onChange={(e) => updateConfig({ card3Title: e.target.value })} placeholder="Título" className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-sky-500" />
+                    <textarea value={config.card3Desc} onChange={(e) => updateConfig({ card3Desc: e.target.value })} placeholder="Descripción" className="w-full px-4 py-3 bg-white border border-stone-200 rounded-xl font-medium text-[11px] h-20 outline-none focus:border-sky-500 resize-none" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-8">
+                <button
+                  onClick={persistConfig}
+                  className={`w-full py-6 rounded-[2rem] font-black text-lg uppercase tracking-widest transition-all ${saveStatus ? 'bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-stone-950 text-white hover:bg-black active:scale-95'}`}
+                >
+                  {saveStatus ? '¡CAMBIOS GUARDADOS!' : 'GUARDAR TODOS LOS CAMBIOS'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -366,7 +437,7 @@ const AdminPanel: React.FC = () => {
                   onClick={() => setShowWinnerPreview(true)}
                   className="bg-sky-600 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-sky-700 transition-all shadow-lg active:scale-95"
                 >
-                  PROBAR PREVIEW DE SOCIO
+                  PROBAR PREVIEW DE USUARIO
                 </button>
               </div>
 
@@ -383,6 +454,15 @@ const AdminPanel: React.FC = () => {
                   <label className="text-[10px] font-black uppercase text-stone-400 tracking-widest ml-4">INSTRUCCIONES FINALES</label>
                   <textarea value={config.winnerViewInstructions} onChange={(e) => updateConfig({ winnerViewInstructions: e.target.value })} className="w-full px-8 py-8 bg-stone-50 border-2 border-stone-100 rounded-[2.5rem] h-40 font-medium focus:border-sky-500 outline-none resize-none text-base" />
                 </div>
+              </div>
+
+              <div className="mt-10">
+                <button
+                  onClick={persistConfig}
+                  className={`w-full py-6 rounded-[2rem] font-black text-lg uppercase tracking-widest transition-all ${saveStatus ? 'bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-stone-950 text-white hover:bg-black active:scale-95'}`}
+                >
+                  {saveStatus ? '¡CAMBIOS GUARDADOS!' : 'GUARDAR DISEÑO DE GANADOR'}
+                </button>
               </div>
             </div>
           )}
@@ -425,9 +505,9 @@ const AdminPanel: React.FC = () => {
                 </div>
               </div>
               <div className="text-center px-4">
-                <p className="text-[10px] font-black text-sky-400 uppercase tracking-[0.4em] mb-1.5">Socio Ganador</p>
+                <p className="text-[10px] font-black text-sky-400 uppercase tracking-[0.4em] mb-1.5">Usuario Ganador</p>
                 <p className="text-white font-mono font-black tracking-widest text-lg md:text-xl uppercase truncate max-w-[280px]">
-                  {config.winner ? config.winner.name : 'SOCIO EJEMPLO'}
+                  {config.winner ? config.winner.name : 'USUARIO EJEMPLO'}
                 </p>
                 <p className="text-sky-300 font-mono font-bold tracking-[0.2em] text-xs leading-none mt-1">
                   DNI {config.winner ? config.winner.dni : '00.000.000'}

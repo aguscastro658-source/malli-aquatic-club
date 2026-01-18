@@ -64,30 +64,23 @@ const SuperAdminPanel: React.FC = () => {
     a.click();
   };
 
-  const handleLogout = () => {
-    dataService.logout();
-    navigate(AppRoute.HOME);
-  };
+
 
   return (
     <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6">
         <div>
           <div className="flex items-center space-x-3 mb-2">
-            <span className="bg-sky-100 text-sky-800 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest border border-sky-200 shadow-sm">Master Access</span>
+            <span className="bg-sky-100 text-sky-800 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest border border-sky-200 shadow-sm">Acceso Maestro</span>
             <span className="bg-stone-900 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">DAMIAN</span>
           </div>
-          <h1 className="text-4xl font-black text-stone-900 font-outfit uppercase tracking-tighter">CENTRAL MASTER</h1>
+          <h1 className="text-4xl font-black text-stone-900 font-outfit uppercase tracking-tighter">CENTRAL MAESTRA</h1>
         </div>
 
         <div className="flex bg-stone-100 p-1.5 rounded-2xl border border-stone-200">
           <button onClick={() => setActiveTab('control')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'control' ? 'bg-white text-sky-800 shadow-sm' : 'text-stone-500'}`}>General</button>
           <button onClick={() => setActiveTab('lockscreen')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'lockscreen' ? 'bg-white text-sky-800 shadow-sm' : 'text-stone-500'}`}>Bloqueo</button>
         </div>
-
-        <button onClick={handleLogout} className="px-6 py-3 bg-stone-100 text-stone-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-stone-200 transition-all">
-          Salir
-        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

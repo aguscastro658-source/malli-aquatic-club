@@ -86,7 +86,7 @@ const LandingPage: React.FC = () => {
           <div className="absolute top-0 right-0 w-80 h-80 bg-sky-600 opacity-10 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2"></div>
           <div className="relative z-10 max-w-2xl mx-auto">
             <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tighter mb-6 md:mb-8 leading-none font-outfit">
-              ¿AÚN NO ERES SOCIO?
+              ¿AÚN NO ERES USUARIO?
             </h2>
             <p className="text-stone-400 text-sm md:text-lg font-medium mb-10 md:mb-12 italic opacity-80">
               Inscríbete en segundos con tu DNI y empieza a participar de los sorteos y beneficios especiales del club.
@@ -95,7 +95,7 @@ const LandingPage: React.FC = () => {
               href="#/login"
               className="inline-block bg-sky-600 text-white px-12 py-5 md:py-6 rounded-full text-sm md:text-base font-black uppercase tracking-widest hover:bg-sky-500 shadow-2xl shadow-sky-900/40 transition-all active:scale-95"
             >
-              UNIKRME AL CLUB
+              UNIRME AL CLUB
             </a>
           </div>
         </div>
