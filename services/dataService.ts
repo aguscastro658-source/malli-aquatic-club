@@ -1,5 +1,6 @@
 
 import { AppRoute } from "../types";
+import { supabase } from "./supabaseClient";
 
 const DEFAULT_CONFIG = {
   promoTitle: "SORTEO DIARIO DE PASES LIBRES",
@@ -17,112 +18,203 @@ const DEFAULT_CONFIG = {
   card1Title: "Piletas",
   card1Desc: "Círculos olímpicas. Piletas abiertas.",
   card2Title: "Sorteo",
-  card2Desc: "Sorteo automático entre usuarios inscriptos.",
+  card2Desc: "Sorteo manual realizado por la administración.",
   card3Title: "DNI",
   card3Desc: "El ganador solo muestra el DNI para el pase gratis."
 };
 
 const KEYS = {
-  CONFIG: 'malli_app_config',
-  USERS: 'malli_registered_users',
-  ACTIVE: 'malli_active_raffle',
-  DEPARTURES: 'malli_user_departures',
   USER_SESSION: 'malli_user_session',
   ADMIN_AUTH: 'malli_admin_auth',
   SUPER_AUTH: 'malli_super_admin_auth'
 };
 
 export const dataService = {
-  getConfig: () => {
-    const saved = localStorage.getItem(KEYS.CONFIG);
-    if (!saved) {
-      localStorage.setItem(KEYS.CONFIG, JSON.stringify(DEFAULT_CONFIG));
-      return DEFAULT_CONFIG;
-    }
-    try {
-      return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
-    } catch (e) {
-      localStorage.setItem(KEYS.CONFIG, JSON.stringify(DEFAULT_CONFIG));
-      return DEFAULT_CONFIG;
-    }
+  getConfig: async () => {
+    const { data, error } = await supabase
+      .from('malli_config')
+      .select('config')
+      .eq('id', 'default')
+      .single();
+
+    if (error || !data) return DEFAULT_CONFIG;
+    return { ...DEFAULT_CONFIG, ...data.config };
   },
 
-  saveConfig: (config: any) => {
-    localStorage.setItem(KEYS.CONFIG, JSON.stringify(config));
+  saveConfig: async (config: any) => {
+    await supabase
+      .from('malli_config')
+      .upsert({ id: 'default', config, updated_at: new Date().toISOString() });
     window.dispatchEvent(new CustomEvent('malli_app_config_updated'));
   },
 
-  getUserByDni: (dni: string) => {
-    const users = JSON.parse(localStorage.getItem(KEYS.USERS) || '[]');
-    return users.find((u: any) => u.dni === dni);
+  getUserByDni: async (dni: string) => {
+    const { data, error } = await supabase
+      .from('malli_users')
+      .select('*')
+      .eq('dni', dni)
+      .single();
+    if (error) return null;
+    return { ...data, name: data.nombre }; // Mapping internal name to app name
   },
 
-  registerUser: (name: string, dni: string) => {
-    const users = JSON.parse(localStorage.getItem(KEYS.USERS) || '[]');
-    const newUser = {
-      name,
-      dni,
-      registeredAt: new Date().toISOString(),
-      lastSeen: new Date().getTime()
-    };
-    if (!users.some((u: any) => u.dni === dni)) {
-      users.push(newUser);
-      localStorage.setItem(KEYS.USERS, JSON.stringify(users));
-    }
-    return newUser;
+  registerUser: async (name: string, dni: string, pass: string = '') => {
+    const { data, error } = await supabase
+      .from('malli_users')
+      .upsert({
+        dni,
+        nombre: name,
+        password: pass || dni,
+        rol: 'usuario'
+      }, { onConflict: 'dni' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { ...data, name: data.nombre };
   },
 
-  unregisterUser: (dni: string) => {
-    const user = dataService.getUserByDni(dni);
+  loginWithDni: async (dni: string, pass: string) => {
+    const { data, error } = await supabase
+      .from('malli_users')
+      .select('*')
+      .eq('dni', dni)
+      .eq('password', pass)
+      .single();
+
+    if (error || !data) return null;
+    return { ...data, name: data.nombre };
+  },
+
+  unregisterUser: async (dni: string) => {
+    const user = await dataService.getUserByDni(dni);
     if (user) {
-      const departures = JSON.parse(localStorage.getItem(KEYS.DEPARTURES) || '[]');
-      departures.unshift({ ...user, leftAt: new Date().toLocaleString() });
-      localStorage.setItem(KEYS.DEPARTURES, JSON.stringify(departures.slice(0, 10)));
+      await supabase
+        .from('malli_departures')
+        .insert({ dni: user.dni, nombre: user.name, left_at: new Date().toISOString() });
     }
-    const users = JSON.parse(localStorage.getItem(KEYS.USERS) || '[]');
-    const newUsers = users.filter((u: any) => u.dni !== dni);
-    localStorage.setItem(KEYS.USERS, JSON.stringify(newUsers));
-    dataService.leaveRaffle(dni);
+    await supabase.from('malli_raffle_participants').delete().eq('dni', dni);
+    await supabase.from('malli_users').delete().eq('dni', dni);
     window.dispatchEvent(new CustomEvent('malli_app_config_updated'));
   },
 
-  updateHeartbeat: (dni: string) => {
-    const active = JSON.parse(localStorage.getItem(KEYS.ACTIVE) || '[]');
-    const now = new Date().getTime();
-    const index = active.findIndex((p: any) => p.dni === dni);
-    if (index !== -1) {
-      active[index].lastSeen = now;
-      localStorage.setItem(KEYS.ACTIVE, JSON.stringify(active));
-    }
+  updateHeartbeat: async (dni: string) => {
+    await supabase
+      .from('malli_raffle_participants')
+      .update({ last_seen: new Date().toISOString() })
+      .eq('dni', dni);
   },
 
-  joinRaffle: (user: { name: string, dni: string }) => {
-    const active = JSON.parse(localStorage.getItem(KEYS.ACTIVE) || '[]');
-    if (!active.some((p: any) => p.dni === user.dni)) {
-      const newList = [...active, { ...user, lastSeen: new Date().getTime(), inscriptedAt: new Date().toISOString() }];
-      localStorage.setItem(KEYS.ACTIVE, JSON.stringify(newList));
-      window.dispatchEvent(new CustomEvent('malli_app_config_updated'));
-    }
-  },
-
-  leaveRaffle: (dni: string) => {
-    const active = JSON.parse(localStorage.getItem(KEYS.ACTIVE) || '[]');
-    const newList = active.filter((p: any) => p.dni !== dni);
-    localStorage.setItem(KEYS.ACTIVE, JSON.stringify(newList));
+  joinRaffle: async (user: { name: string, dni: string }) => {
+    await supabase
+      .from('malli_raffle_participants')
+      .upsert({
+        dni: user.dni,
+        last_seen: new Date().toISOString(),
+        inscripted_at: new Date().toISOString()
+      }, { onConflict: 'dni' });
     window.dispatchEvent(new CustomEvent('malli_app_config_updated'));
   },
 
-  getActiveParticipants: () => {
-    return JSON.parse(localStorage.getItem(KEYS.ACTIVE) || '[]');
+  leaveRaffle: async (dni: string) => {
+    await supabase.from('malli_raffle_participants').delete().eq('dni', dni);
+    window.dispatchEvent(new CustomEvent('malli_app_config_updated'));
   },
 
-  getDepartures: () => {
-    return JSON.parse(localStorage.getItem(KEYS.DEPARTURES) || '[]');
+  getActiveParticipants: async () => {
+    console.log('Fetching participants from Supabase...');
+
+    // First attempt with JOIN - requires Foreign Key relationship
+    const { data, error } = await supabase
+      .from('malli_raffle_participants')
+      .select(`
+        dni,
+        inscripted_at,
+        last_seen,
+        malli_users (
+          nombre
+        )
+      `)
+      .order('inscripted_at', { ascending: false });
+
+    if (error) {
+      console.warn('Joint fetch failed, trying fallback separate fetch:', error);
+
+      // FALLBACK: Fetch participants only and then hydrate names
+      const { data: partData, error: partError } = await supabase
+        .from('malli_raffle_participants')
+        .select('dni, inscripted_at, last_seen')
+        .order('inscripted_at', { ascending: false });
+
+      if (partError) {
+        console.error('Fatal error fetching participants:', partError);
+        return [];
+      }
+
+      // Fetch all user names in one go for hydration
+      const { data: userData } = await supabase
+        .from('malli_users')
+        .select('dni, nombre');
+
+      const nameMap = new Map((userData || []).map(u => [u.dni, u.nombre]));
+
+      return partData.map((p: any) => ({
+        dni: p.dni,
+        name: nameMap.get(p.dni) || 'Candidato inscripto',
+        inscriptedAt: p.inscripted_at,
+        lastSeen: new Date(p.last_seen || Date.now()).getTime()
+      }));
+    }
+
+    return (data || []).map((p: any) => {
+      const userName = Array.isArray(p.malli_users)
+        ? p.malli_users[0]?.nombre
+        : p.malli_users?.nombre;
+
+      return {
+        dni: p.dni,
+        name: userName || 'Candidato inscripto',
+        inscriptedAt: p.inscripted_at,
+        lastSeen: new Date(p.last_seen || Date.now()).getTime()
+      };
+    });
   },
 
-  isUserInscripted: (dni: string) => {
-    const active = JSON.parse(localStorage.getItem(KEYS.ACTIVE) || '[]');
-    return active.some((p: any) => p.dni === dni);
+  getDepartures: async () => {
+    const { data, error } = await supabase
+      .from('malli_departures')
+      .select('*')
+      .order('left_at', { ascending: false })
+      .limit(20);
+
+    if (error || !data) return [];
+    return data.map((d: any) => ({
+      dni: d.dni,
+      name: d.nombre,
+      leftAt: new Date(d.left_at).toLocaleString()
+    }));
+  },
+
+  getAllUsers: async () => {
+    const { data, error } = await supabase
+      .from('malli_users')
+      .select('*')
+      .order('nombre', { ascending: true });
+
+    if (error || !data) return [];
+    return data.map((u: any) => ({
+      ...u,
+      name: u.nombre
+    }));
+  },
+
+  isUserInscripted: async (dni: string) => {
+    const { data, error } = await supabase
+      .from('malli_raffle_participants')
+      .select('dni')
+      .eq('dni', dni)
+      .single();
+    return !!data;
   },
 
   setUserSession: (user: any) => {
@@ -146,12 +238,17 @@ export const dataService = {
     window.dispatchEvent(new CustomEvent('malli_auth_changed'));
   },
 
-  exportAllData: () => {
+  exportAllData: async () => {
+    const config = await dataService.getConfig();
+    const { data: users } = await supabase.from('malli_users').select('*');
+    const participants = await dataService.getActiveParticipants();
+    const departures = await dataService.getDepartures();
+
     const data = {
-      config: dataService.getConfig(),
-      users: JSON.parse(localStorage.getItem(KEYS.USERS) || '[]'),
-      activeRaffle: dataService.getActiveParticipants(),
-      departures: dataService.getDepartures()
+      config,
+      users,
+      activeRaffle: participants,
+      departures
     };
     return JSON.stringify(data, null, 2);
   }

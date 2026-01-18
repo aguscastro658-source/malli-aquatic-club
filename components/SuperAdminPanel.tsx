@@ -18,19 +18,26 @@ const SuperAdminPanel: React.FC = () => {
 
   useEffect(() => {
     const auth = sessionStorage.getItem('malli_super_admin_auth') === 'true';
-    if (!auth) navigate(AppRoute.ADMIN);
+    if (!auth) {
+      navigate(AppRoute.ADMIN);
+      return;
+    }
 
-    const config = dataService.getConfig();
-    setAppEnabled(config.appStatus !== 'maintenance');
-    setAdminAccessEnabled(config.adminAccessEnabled !== false);
-    if (config.licenseDays !== undefined) setLicenseDays(config.licenseDays);
-    if (config.maintenanceTitle) setMaintenanceTitle(config.maintenanceTitle);
-    if (config.maintenanceSubtitle) setMaintenanceSubtitle(config.maintenanceSubtitle);
-    if (config.maintenanceMessage) setMaintenanceMessage(config.maintenanceMessage);
+    const loadConfig = async () => {
+      const config = await dataService.getConfig();
+      setAppEnabled(config.appStatus !== 'maintenance');
+      setAdminAccessEnabled(config.adminAccessEnabled !== false);
+      if (config.licenseDays !== undefined) setLicenseDays(config.licenseDays);
+      if (config.maintenanceTitle) setMaintenanceTitle(config.maintenanceTitle);
+      if (config.maintenanceSubtitle) setMaintenanceSubtitle(config.maintenanceSubtitle);
+      if (config.maintenanceMessage) setMaintenanceMessage(config.maintenanceMessage);
+    };
+
+    loadConfig();
   }, [navigate]);
 
-  const handleSave = () => {
-    const config = dataService.getConfig();
+  const handleSave = async () => {
+    const config = await dataService.getConfig();
 
     const newConfig = {
       ...config,
@@ -42,13 +49,13 @@ const SuperAdminPanel: React.FC = () => {
       maintenanceMessage
     };
 
-    dataService.saveConfig(newConfig);
+    await dataService.saveConfig(newConfig);
     setSaveStatus(true);
     setTimeout(() => setSaveStatus(false), 2000);
   };
 
-  const handleExportData = () => {
-    const data = dataService.exportAllData();
+  const handleExportData = async () => {
+    const data = await dataService.exportAllData();
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

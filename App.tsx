@@ -9,19 +9,17 @@ import Login from './components/Login';
 import UserPanel from './components/UserPanel';
 import MaintenanceMode from './components/MaintenanceMode';
 import { AppRoute } from './types';
+import { dataService } from './services/dataService';
 
 const App: React.FC = () => {
   const [isMaintenance, setIsMaintenance] = useState(false);
 
-  const checkMaintenance = () => {
-    const savedConfig = localStorage.getItem('malli_app_config');
-    if (savedConfig) {
-      try {
-        const config = JSON.parse(savedConfig);
-        setIsMaintenance(config.appStatus === 'maintenance');
-      } catch (e) {
-        setIsMaintenance(false);
-      }
+  const checkMaintenance = async () => {
+    try {
+      const config = await dataService.getConfig();
+      setIsMaintenance(config.appStatus === 'maintenance');
+    } catch (e) {
+      setIsMaintenance(false);
     }
   };
 
@@ -35,7 +33,7 @@ const App: React.FC = () => {
     <Router>
       <div className="min-h-screen flex flex-col bg-[#f0f9ff]">
         {(!isMaintenance || window.location.hash.includes('/admin') || window.location.hash.includes('/super-admin')) && <Navbar />}
-        
+
         <main className="flex-grow">
           {isMaintenance ? (
             <Routes>
@@ -54,7 +52,7 @@ const App: React.FC = () => {
             </Routes>
           )}
         </main>
-        
+
         {(!isMaintenance || window.location.hash.includes('/admin') || window.location.hash.includes('/super-admin')) && (
           <footer className="bg-sky-950 py-16 px-4 text-sky-400">
             <div className="max-w-7xl mx-auto text-center md:text-left">
